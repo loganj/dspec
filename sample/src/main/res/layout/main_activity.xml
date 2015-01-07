@@ -31,4 +31,16 @@
         android:divider="@null"
         android:dividerHeight="0px"/>
 
+    <TextView
+        android:layout_width="match_parent"
+        android:layout_height="48dp"
+        android:paddingLeft="24dp"
+        android:paddingBottom="12dp"
+        android:textSize="14sp"
+        android:text="Snack attack!"
+        android:background="#323232"
+        android:textColor="@android:color/white"
+        android:gravity="bottom"
+        android:layout_gravity="bottom"
+        />
 </org.lucasr.dspec.DesignSpecFrameLayout>

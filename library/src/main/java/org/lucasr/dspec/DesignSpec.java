@@ -16,24 +16,20 @@
 
 package org.lucasr.dspec;
 
-import android.content.Context;
 import android.content.res.Resources;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.ColorFilter;
 import android.graphics.Paint;
 import android.graphics.PixelFormat;
-import android.graphics.Rect;
 import android.graphics.drawable.Drawable;
 import android.view.View;
-
-import org.json.JSONArray;
-import org.json.JSONException;
-import org.json.JSONObject;
-
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
+import org.json.JSONArray;
+import org.json.JSONException;
+import org.json.JSONObject;
 
 /**
  * Draw a baseline grid, keylines, and spacing markers on top of a {@link View}.
@@ -41,6 +37,7 @@ import java.util.List;
  * A {@link DesignSpec} can be configure programmatically as follows:
  * <ol>
  * <li>Toggle baseline grid visibility with {@link #setBaselineGridVisible(boolean)}.</li>
+ * <li>Split the baseline grid into two grids, one anchored at TOP and one at BOTTOM.</li>
  * <li>Change baseline grid cell width with {@link #setBaselineGridCellSize(float)}.
  * <li>Change baseline grid color with {@link #setBaselineGridColor(int)}.
  * <li>Toggle keylines visibility with {@link #setKeylinesVisible(boolean)}.
@@ -56,6 +53,10 @@ import java.util.List;
  * {
  *     "baselineGridVisible": true,
  *     "baselineGridCellSize": 8,
+ *     "baselineGridSplit": {
+ *       "offset": 48,
+ *       "from": "BOTTOM"
+ *     }
  *     "keylines": [
  *         { "offset": 16,
  *           "from": "LEFT" },
@@ -90,16 +91,16 @@ import java.util.List;
  * The easiest way to use a {@link DesignSpec} is by enclosing your target {@link View} with
  * a {@link DesignSpecFrameLayout} using the {@code designSpec} attribute as follows:
  * <pre>
- * <org.lucasr.dspec.DesignSpecFrameLayout
+ * &lt;org.lucasr.dspec.DesignSpecFrameLayout
  *     xmlns:android="http://schemas.android.com/apk/res/android"
  *     android:id="@+id/design_spec"
  *     android:layout_width="match_parent"
  *     android:layout_height="match_parent"
- *     app:designSpec="@raw/my_spec">
+ *     app:designSpec="@raw/my_spec"&gt;
  *
  *     ...
  *
- * </org.lucasr.dspec.DesignSpecFrameLayout>
+ * &lt;/org.lucasr.dspec.DesignSpecFrameLayout&gt;
  * </pre>
  *
  * Where {@code @raw/my_spec} is a raw JSON resource. Because the {@link DesignSpec} is
@@ -107,7 +108,7 @@ import java.util.List;
  * well-known resource qualifiers making it easy to define different specs for phones and tablets.
  *
  * Because {@link DesignSpec} is a {@link Drawable}, you can simply add it to any
- * {@link android.view.ViewOverlay} if you're running your app on API level >= 18:
+ * {@link android.view.ViewOverlay} if you're running your app on API level &gt;= 18:
  *
  * <pre>
  * DesignSpec designSpec = DesignSpec.fromResource(someView, R.raw.some_spec);
@@ -133,6 +134,7 @@ public class DesignSpec extends Drawable {
     private static final String JSON_KEY_BASELINE_GRID_VISIBLE = "baselineGridVisible";
     private static final String JSON_KEY_BASELINE_GRID_CELL_SIZE = "baselineGridCellSize";
     private static final String JSON_KEY_BASELINE_GRID_COLOR = "baselineGridColor";
+    private static final String JSON_KEY_BASELINE_GRID_SPLIT = "baselineGridSplit";
 
     private static final String JSON_KEY_KEYLINES_VISIBLE = "keylinesVisible";
     private static final String JSON_KEY_KEYLINES_COLOR = "keylinesColor";
@@ -218,6 +220,7 @@ public class DesignSpec extends Drawable {
     private boolean mBaselineGridVisible = DEFAULT_BASELINE_GRID_VISIBLE;
     private float mBaselineGridCellSize;
     private final Paint mBaselineGridPaint;
+    private Keyline mBaselineGridSplit;
 
     private boolean mKeylinesVisible = DEFAULT_KEYLINES_VISIBLE;
     private final Paint mKeylinesPaint;
@@ -266,6 +269,42 @@ public class DesignSpec extends Drawable {
         invalidateSelf();
 
         return this;
+    }
+
+  /**
+   * Sets the location of a split in the baseline grid.  If set, the baseline grid is split into
+   * two grids, one originating at TOP and one originating at BOTTOM.  This is useful when a design
+   * calls for bottom-anchored content that should be internally grid-aligned.
+   */
+    public DesignSpec setBaselineGridSplit(float position, From from) {
+        if (from != From.BOTTOM && from != From.TOP) {
+            throw new IllegalArgumentException(
+              "Grid can only be split vertically, i.e. some distance from TOP or BOTTOM");
+        }
+        Keyline split = new Keyline(position, from);
+        if (split.equals(mBaselineGridSplit)) {
+            return this;
+        }
+
+        mBaselineGridSplit = split;
+        invalidateSelf();
+
+        return this;
+    }
+
+    public DesignSpec clearBaselineGridSplit() {
+        if (mBaselineGridSplit == null) {
+            return this;
+        }
+
+        mBaselineGridSplit = null;
+        invalidateSelf();
+
+        return this;
+    }
+
+    public boolean isBaselineGridSplit() {
+        return mBaselineGridSplit != null;
     }
 
     /**
@@ -400,17 +439,36 @@ public class DesignSpec extends Drawable {
 
         final int width = getIntrinsicWidth();
         final int height = getIntrinsicHeight();
+        final float splitPos;
+        if (mBaselineGridSplit == null) {
+          splitPos = height + mBaselineGridCellSize;
+        } else if (mBaselineGridSplit.from == From.TOP) {
+          splitPos = mDensity * mBaselineGridSplit.position;
+        } else {
+          splitPos = height - mDensity * mBaselineGridSplit.position;
+        }
+        int bottomRows = (int) Math.floor((height - splitPos) / mBaselineGridCellSize);
 
         float x = mBaselineGridCellSize;
+        float slop = (splitPos % mBaselineGridCellSize);
+        float maxY = splitPos - slop;
+        float minY = height - bottomRows * mBaselineGridCellSize;
+
         while (x < width) {
-            canvas.drawLine(x, 0, x, height, mBaselineGridPaint);
+            canvas.drawLine(x, 0, x, maxY, mBaselineGridPaint);
+            canvas.drawLine(x, height, x, minY, mBaselineGridPaint);
             x += mBaselineGridCellSize;
         }
 
         float y = mBaselineGridCellSize;
-        while (y < height) {
+        while (y <= splitPos) {
             canvas.drawLine(0, y, width, y, mBaselineGridPaint);
             y += mBaselineGridCellSize;
+        }
+        y = height;
+        while (y >= splitPos) {
+            canvas.drawLine(0, y, width, y, mBaselineGridPaint);
+            y -= mBaselineGridCellSize;
         }
     }
 
@@ -611,6 +669,15 @@ public class DesignSpec extends Drawable {
                 DEFAULT_KEYLINE_COLOR)));
         spec.setSpacingsColor(Color.parseColor(json.optString(JSON_KEY_SPACINGS_COLOR,
                 DEFAULT_SPACING_COLOR)));
+
+        final JSONObject split = json.optJSONObject(JSON_KEY_BASELINE_GRID_SPLIT);
+        if (split != null) {
+          try {
+            spec.setBaselineGridSplit(split.getInt(JSON_KEY_OFFSET),
+                From.valueOf(split.getString(JSON_KEY_FROM).toUpperCase()));
+          } catch (JSONException e) {
+          }
+        }
 
         final JSONArray keylines = json.optJSONArray(JSON_KEY_KEYLINES);
         if (keylines != null) {

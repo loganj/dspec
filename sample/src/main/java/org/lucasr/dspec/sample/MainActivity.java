@@ -20,12 +20,12 @@ import android.app.Activity;
 import android.os.Bundle;
 import android.view.Menu;
 import android.view.MenuItem;
+import android.view.MenuItem.OnMenuItemClickListener;
 import android.widget.ListView;
-
-import org.lucasr.dspec.DesignSpecFrameLayout;
-
 import butterknife.ButterKnife;
 import butterknife.InjectView;
+import org.lucasr.dspec.DesignSpec.From;
+import org.lucasr.dspec.DesignSpecFrameLayout;
 
 public final class MainActivity extends Activity {
     @InjectView(R.id.list) ListView mList;
@@ -37,7 +37,6 @@ public final class MainActivity extends Activity {
 
         setContentView(R.layout.main_activity);
         ButterKnife.inject(this);
-
         mList.setAdapter(new SimpleAdapter(this));
     }
 
@@ -55,6 +54,22 @@ public final class MainActivity extends Activity {
                         return true;
                     }
                 });
+
+        menu.add("Split baseline grid")
+               .setCheckable(true)
+               .setChecked(mDesignSpecLayout.getDesignSpec().isBaselineGridSplit())
+               .setOnMenuItemClickListener(new OnMenuItemClickListener() {
+                 @Override public boolean onMenuItemClick(MenuItem item) {
+                       boolean checked = !item.isChecked();
+                       item.setChecked(checked);
+                       if (checked) {
+                           mDesignSpecLayout.getDesignSpec().setBaselineGridSplit(48, From.BOTTOM);
+                       } else {
+                           mDesignSpecLayout.getDesignSpec().clearBaselineGridSplit();
+                       }
+                       return true;
+                 }
+               });
 
         menu.add(getString(R.string.show_keylines))
                 .setCheckable(true)
